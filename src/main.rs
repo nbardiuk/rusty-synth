@@ -11,16 +11,66 @@ use std::time::Duration;
 const TAU: f32 = PI * 2.0;
 
 struct Synth<'a> {
-    time: f32,
+    time: &'a mut f32,
     time_step: f32,
-    volume: f32,
     mu_hertz: &'a AtomicU32,
+    envelope: &'a Adsr,
+}
+
+struct Adsr {
+    start_amplitude: f32,
+    attack_time: f32,
+    decay_time: f32,
+    sustain_amplitude: f32,
+    release_time: f32,
+
+    trigger_start: Option<f32>,
+    trigger_end: Option<f32>,
+}
+
+impl Adsr {
+    fn amplitude(&self, time: f32) -> f32 {
+        let amplitude = if let Some(start_time) = self.trigger_start {
+            match self.trigger_end {
+                None => {
+                    // button on
+                    let local_time = time - start_time;
+                    if local_time <= self.attack_time {
+                        // phase attack
+                        (local_time / self.attack_time) * self.start_amplitude
+                    } else if local_time <= self.attack_time + self.decay_time {
+                        // phase decay
+                        (local_time - self.attack_time) / self.decay_time
+                            * (self.sustain_amplitude - self.start_amplitude)
+                            + self.start_amplitude
+                    } else {
+                        // phase sustain
+                        self.sustain_amplitude
+                    }
+                }
+                Some(end_time) => {
+                    // button off
+                    // phase release
+                    (time - end_time) / self.release_time * (0. - self.sustain_amplitude)
+                        + self.sustain_amplitude
+                }
+            }
+        } else {
+            0.
+        };
+
+        if amplitude <= 0.0001 {
+            0.
+        } else {
+            amplitude
+        }
+    }
 }
 
 impl<'a> Synth<'a> {
     fn play(&self, time: f32) -> f32 {
         let hertz = self.mu_hertz.load(Ordering::Relaxed) as f32 / 1_000000.;
-        self.volume * Synth::noise(hertz, time)
+        self.envelope.amplitude(time) * Synth::sine(hertz, time)
     }
 
     fn sine(hertz: f32, time: f32) -> f32 {
@@ -62,8 +112,8 @@ impl<'a> AudioCallback for Synth<'a> {
 
     fn callback(&mut self, out: &mut [Self::Channel]) {
         for x in out.iter_mut() {
-            self.time += self.time_step;
-            *x = self.play(self.time);
+            *self.time += self.time_step;
+            *x = self.play(*self.time);
         }
     }
 }
@@ -80,15 +130,26 @@ fn main() {
     };
 
     let note = AtomicU32::new(0);
+    let mut envelope = Adsr {
+        start_amplitude: 1.,
+        attack_time: 0.1,
+        decay_time: 0.01,
+        sustain_amplitude: 0.8,
+        release_time: 0.2,
+
+        trigger_start: None,
+        trigger_end: None,
+    };
+    let mut time = 0.;
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
             // initialize the audio callback
             println!("{:?}", spec);
             Synth {
-                time: 0.0,
+                time: &mut time,
                 time_step: 1.0 / spec.freq as f32,
-                volume: 0.15,
                 mu_hertz: &note,
+                envelope: &envelope,
             }
         })
         .unwrap();
@@ -148,12 +209,14 @@ fn main() {
                 } if keyboard.contains_key(&key) => {
                     if let Some(&v) = keyboard.get(&key) {
                         note.store(v, Ordering::Relaxed);
+                        envelope.trigger_start = Some(time);
+                        envelope.trigger_end = None;
                     }
                 }
                 Event::KeyUp {
                     keycode: Some(key), ..
                 } if keyboard.contains_key(&key) => {
-                    note.store(0, Ordering::Relaxed);
+                    envelope.trigger_end = Some(time);
                 }
                 _ => {}
             }
