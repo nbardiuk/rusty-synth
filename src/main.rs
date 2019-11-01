@@ -1,3 +1,4 @@
+use rand::prelude::*;
 use sdl2::audio::{AudioCallback, AudioSpecDesired};
 use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
@@ -13,13 +14,46 @@ struct Synth<'a> {
     time: f32,
     time_step: f32,
     volume: f32,
-    note: &'a AtomicU32,
+    mu_hertz: &'a AtomicU32,
 }
 
 impl<'a> Synth<'a> {
-    fn noise(&self, time: f32) -> f32 {
-        let note = self.note.load(Ordering::Relaxed) as f32 / 1_000000.;
-        self.volume * (note * TAU * time).sin()
+    fn play(&self, time: f32) -> f32 {
+        let hertz = self.mu_hertz.load(Ordering::Relaxed) as f32 / 1_000000.;
+        self.volume * Synth::noise(hertz, time)
+    }
+
+    fn sine(hertz: f32, time: f32) -> f32 {
+        (hertz * TAU * time).sin()
+    }
+
+    fn square(hertz: f32, time: f32) -> f32 {
+        if (hertz * TAU * time).sin() > 0. {
+            1.
+        } else {
+            -1.
+        }
+    }
+
+    fn triangle(hertz: f32, time: f32) -> f32 {
+        (hertz * TAU * time).sin().asin() * 2. / PI
+    }
+
+    fn saw(hertz: f32, time: f32) -> f32 {
+        let x = hertz * TAU * time;
+        let mut result = 0.;
+        for n in 1..40 {
+            result += (x * n as f32).sin() / n as f32
+        }
+        result * 2. / PI
+    }
+
+    fn noise(hertz: f32, time: f32) -> f32 {
+        if hertz == 0. {
+            0.
+        } else {
+            thread_rng().gen_range(-1.0, 1.0)
+        }
     }
 }
 
@@ -29,7 +63,7 @@ impl<'a> AudioCallback for Synth<'a> {
     fn callback(&mut self, out: &mut [Self::Channel]) {
         for x in out.iter_mut() {
             self.time += self.time_step;
-            *x = self.noise(self.time);
+            *x = self.play(self.time);
         }
     }
 }
@@ -54,7 +88,7 @@ fn main() {
                 time: 0.0,
                 time_step: 1.0 / spec.freq as f32,
                 volume: 0.15,
-                note: &note,
+                mu_hertz: &note,
             }
         })
         .unwrap();
