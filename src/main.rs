@@ -4,7 +4,6 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use std::collections::HashMap;
 use std::f32::consts::PI;
-use std::sync::atomic::{AtomicU32, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -13,7 +12,7 @@ const TAU: f32 = PI * 2.0;
 struct Synth<'a> {
     time: &'a mut f32,
     time_step: f32,
-    mu_hertz: &'a AtomicU32,
+    hertz: &'a f32,
     envelope: &'a Adsr,
 }
 
@@ -69,8 +68,7 @@ impl Adsr {
 
 impl<'a> Synth<'a> {
     fn play(&self, time: f32) -> f32 {
-        let hertz = self.mu_hertz.load(Ordering::Relaxed) as f32 / 1_000000.;
-        self.envelope.amplitude(time) * (Synth::lfo(Synth::saw, hertz, time, 5.0, 0.001))
+        self.envelope.amplitude(time) * (Synth::lfo(Synth::saw, *self.hertz, time, 5.0, 0.001))
     }
 
     fn lfo(osc: fn(f32) -> f32, hertz: f32, time: f32, lfo_hertz: f32, lfo_amplitude: f32) -> f32 {
@@ -132,7 +130,7 @@ fn main() {
         samples: Some(512),
     };
 
-    let note = AtomicU32::new(0);
+    let mut note = 0.;
     let mut envelope = Adsr {
         start_amplitude: 0.2,
         attack_time: 0.1,
@@ -151,7 +149,7 @@ fn main() {
             Synth {
                 time: &mut time,
                 time_step: 1.0 / spec.freq as f32,
-                mu_hertz: &note,
+                hertz: &note,
                 envelope: &envelope,
             }
         })
@@ -159,26 +157,26 @@ fn main() {
 
     let keyboard = [
         //A
-        (Keycode::Q, 440_000000),
-        (Keycode::Num2, 466_163800),
-        (Keycode::W, 493_883300),
+        (Keycode::Q, 440.),
+        (Keycode::Num2, 466.1638),
+        (Keycode::W, 493.8833),
         //C
-        (Keycode::E, 523_251100),
-        (Keycode::Num4, 554_365300),
-        (Keycode::R, 587_329500),
-        (Keycode::Num5, 622_254000),
-        (Keycode::T, 659_255100),
+        (Keycode::E, 523.2511),
+        (Keycode::Num4, 554.3653),
+        (Keycode::R, 587.3295),
+        (Keycode::Num5, 622.254),
+        (Keycode::T, 659.2551),
         //F
-        (Keycode::Y, 698_456500),
-        (Keycode::Num7, 739_988800),
-        (Keycode::U, 783_990900),
-        (Keycode::Num8, 830_609400),
+        (Keycode::Y, 698.4565),
+        (Keycode::Num7, 739.9888),
+        (Keycode::U, 783.9909),
+        (Keycode::Num8, 830.6094),
         //A
-        (Keycode::I, 880_000000),
-        (Keycode::Num9, 932_327500),
-        (Keycode::O, 987_766600),
+        (Keycode::I, 880.),
+        (Keycode::Num9, 932.3275),
+        (Keycode::O, 987.7666),
         //C
-        (Keycode::P, 1046_502000),
+        (Keycode::P, 1046.502),
     ]
     .iter()
     .cloned()
@@ -211,9 +209,11 @@ fn main() {
                     keycode: Some(key), ..
                 } if keyboard.contains_key(&key) => {
                     if let Some(&v) = keyboard.get(&key) {
-                        note.store(v, Ordering::Relaxed);
-                        envelope.trigger_start = Some(time);
-                        envelope.trigger_end = None;
+                        if !(note == v && envelope.trigger_end.is_none()) {
+                            note = v;
+                            envelope.trigger_start = Some(time);
+                            envelope.trigger_end = None;
+                        }
                     }
                 }
                 Event::KeyUp {
