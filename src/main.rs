@@ -18,7 +18,7 @@ struct Synth<'a> {
 
 impl<'a> Synth<'a> {
     fn noise(&self, time: f32) -> f32 {
-        let note = self.note.load(Ordering::Relaxed) as f32 / 1000000.;
+        let note = self.note.load(Ordering::Relaxed) as f32 / 1_000000.;
         self.volume * (note * TAU * time).sin()
     }
 }
@@ -45,7 +45,7 @@ fn main() {
         samples: Some(512),
     };
 
-    let note = AtomicU32::new(110_000000);
+    let note = AtomicU32::new(0);
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
             // initialize the audio callback
@@ -75,6 +75,7 @@ fn main() {
         (Keycode::Num7, 739_988800),
         (Keycode::U, 783_990900),
         (Keycode::Num8, 830_609400),
+        //A
         (Keycode::I, 880_000000),
         (Keycode::Num9, 932_327500),
         (Keycode::O, 987_766600),
@@ -115,10 +116,15 @@ fn main() {
                         note.store(v, Ordering::Relaxed);
                     }
                 }
+                Event::KeyUp {
+                    keycode: Some(key), ..
+                } if keyboard.contains_key(&key) => {
+                    note.store(0, Ordering::Relaxed);
+                }
                 _ => {}
             }
         }
         view.present();
-        thread::sleep(Duration::from_secs_f32(1. / 60.));
+        thread::sleep(Duration::from_secs_f32(1. / 120.));
     }
 }
