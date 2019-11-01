@@ -70,36 +70,39 @@ impl Adsr {
 impl<'a> Synth<'a> {
     fn play(&self, time: f32) -> f32 {
         let hertz = self.mu_hertz.load(Ordering::Relaxed) as f32 / 1_000000.;
-        self.envelope.amplitude(time) * Synth::sine(hertz, time)
+        self.envelope.amplitude(time) * (Synth::lfo(Synth::saw, hertz, time, 5.0, 0.001))
     }
 
-    fn sine(hertz: f32, time: f32) -> f32 {
-        (hertz * TAU * time).sin()
+    fn lfo(osc: fn(f32) -> f32, hertz: f32, time: f32, lfo_hertz: f32, lfo_amplitude: f32) -> f32 {
+        osc(hertz * (TAU * time + lfo_amplitude * (lfo_hertz * TAU * time).sin()))
     }
 
-    fn square(hertz: f32, time: f32) -> f32 {
-        if (hertz * TAU * time).sin() > 0. {
+    fn sine(w: f32) -> f32 {
+        w.sin()
+    }
+
+    fn square(w: f32) -> f32 {
+        if w.sin() > 0. {
             1.
         } else {
             -1.
         }
     }
 
-    fn triangle(hertz: f32, time: f32) -> f32 {
-        (hertz * TAU * time).sin().asin() * 2. / PI
+    fn triangle(w: f32) -> f32 {
+        w.sin().asin() * 2. / PI
     }
 
-    fn saw(hertz: f32, time: f32) -> f32 {
-        let x = hertz * TAU * time;
+    fn saw(w: f32) -> f32 {
         let mut result = 0.;
         for n in 1..40 {
-            result += (x * n as f32).sin() / n as f32
+            result += (w * n as f32).sin() / n as f32
         }
         result * 2. / PI
     }
 
-    fn noise(hertz: f32, time: f32) -> f32 {
-        if hertz == 0. {
+    fn noise(w: f32) -> f32 {
+        if w == 0. {
             0.
         } else {
             thread_rng().gen_range(-1.0, 1.0)
@@ -131,10 +134,10 @@ fn main() {
 
     let note = AtomicU32::new(0);
     let mut envelope = Adsr {
-        start_amplitude: 1.,
+        start_amplitude: 0.2,
         attack_time: 0.1,
         decay_time: 0.01,
-        sustain_amplitude: 0.8,
+        sustain_amplitude: 0.18,
         release_time: 0.2,
 
         trigger_start: None,
