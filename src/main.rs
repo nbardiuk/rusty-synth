@@ -18,7 +18,7 @@ struct Synth<'a> {
 
 impl<'a> Synth<'a> {
     fn noise(&self, time: f32) -> f32 {
-        let note = self.note.load(Ordering::Relaxed) as f32 / 10000.;
+        let note = self.note.load(Ordering::Relaxed) as f32 / 1000000.;
         self.volume * (note * TAU * time).sin()
     }
 }
@@ -45,7 +45,7 @@ fn main() {
         samples: Some(512),
     };
 
-    let note = AtomicU32::new(110_0000);
+    let note = AtomicU32::new(110_000000);
     let device = audio_subsystem
         .open_playback(None, &desired_spec, |spec| {
             // initialize the audio callback
@@ -61,25 +61,25 @@ fn main() {
 
     let keyboard = [
         //A
-        (Keycode::Q, 440_0000),
-        (Keycode::Num2, 466_1638),
-        (Keycode::W, 493_8833),
+        (Keycode::Q, 440_000000),
+        (Keycode::Num2, 466_163800),
+        (Keycode::W, 493_883300),
         //C
-        (Keycode::E, 523_2511),
-        (Keycode::Num4, 554_3653),
-        (Keycode::R, 587_3295),
-        (Keycode::Num5, 622_2540),
-        (Keycode::T, 659_2551),
+        (Keycode::E, 523_251100),
+        (Keycode::Num4, 554_365300),
+        (Keycode::R, 587_329500),
+        (Keycode::Num5, 622_254000),
+        (Keycode::T, 659_255100),
         //F
-        (Keycode::Y, 698_4565),
-        (Keycode::Num7, 739_9888),
-        (Keycode::U, 783_9909),
-        (Keycode::Num8, 830_6094),
-        (Keycode::I, 880_0000),
-        (Keycode::Num9, 932_3275),
-        (Keycode::O, 987_7666),
+        (Keycode::Y, 698_456500),
+        (Keycode::Num7, 739_988800),
+        (Keycode::U, 783_990900),
+        (Keycode::Num8, 830_609400),
+        (Keycode::I, 880_000000),
+        (Keycode::Num9, 932_327500),
+        (Keycode::O, 987_766600),
         //C
-        (Keycode::P, 1046_5020),
+        (Keycode::P, 1046_502000),
     ]
     .iter()
     .cloned()
